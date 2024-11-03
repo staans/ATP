@@ -1,8 +1,10 @@
+from typehints import *
+
 def regelsysteem(
-    light_sensor: callable[[], float],
-    temp_humid_sensor: callable[[], tuple[float, float]],
-    warm_pump: callable[[float], None],
-    cold_pump: callable[[float], None],
+    light_sensor : LightSensor,
+    temp_humid_sensor : TempHumidSensor,
+    warm_pump : Pump,
+    cold_pump : Pump,
 ) -> None:
     # main loop
     while True:

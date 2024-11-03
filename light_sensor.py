@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 
+from collections.abc import Callable
+
 def light_sensor(
-    scl: callable[[bool|None], bool],
-    sda: callable[[bool|None], bool]
-) -> callable[[], float]:
+
+) -> Callable[[], float]:
     def r() -> float:
         # todo: actually read sensor with scl & sda
         return 0
