@@ -1,3 +1,4 @@
+from simulation import Simulation
 from typehints import *
 
 # returns a function that can be called to read or write to a pin using the read and write function provided
@@ -13,9 +14,10 @@ def pin(
 
 # returns a function whose read and write functions interact with the simulation
 def simulated_pin(
-    pin_num: int
+    pin_num : int,
+    sim : Simulation
 ) -> Pin:
     return pin(
-        lambda h: None,
-        lambda: False
+        lambda v: sim.set_pin(pin_num, v),
+        lambda: sim.pins[pin_num]
     )
