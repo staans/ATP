@@ -10,23 +10,23 @@ def init(sim : Simulation):
     lib = ctypes.CDLL(libname)
 
     SET_PIN_FUNC = ctypes.CFUNCTYPE(None, ctypes.c_int, ctypes.c_bool)
-    set_pin_func = lambda pin, val : sim.set_pin(pin, val)
+    set_pin_func = SET_PIN_FUNC(lambda pin, val : sim.set_pin(pin, val))
 
-    READ_PIN_FUNC = ctypes.CFUNCTYPE(ctypes.c_bool)
-    read_pin_func = lambda pin, val : sim.set_pin(pin, val)
+    READ_PIN_FUNC = ctypes.CFUNCTYPE(ctypes.c_bool, ctypes.c_int)
+    read_pin_func = READ_PIN_FUNC(lambda pin : sim.pins[pin])
 
     US_FUNC = ctypes.CFUNCTYPE(ctypes.c_ulong)
-    us_func = lambda: sim.time
+    us_func = US_FUNC(lambda: sim.time)
 
     DELAY_US_FUNC = ctypes.CFUNCTYPE(None, ctypes.c_ulong)
-    delay_us_func = lambda t: sim.sleep(t)
+    delay_us_func = DELAY_US_FUNC(lambda t: sim.sleep(t))
 
     init.funcs = (set_pin_func, read_pin_func, us_func, delay_us_func)
 
-    lib.set_set_pin_func(SET_PIN_FUNC(set_pin_func))
-    lib.set_read_pin_func(READ_PIN_FUNC(read_pin_func))
-    lib.set_us_func(US_FUNC(us_func))
-    lib.set_delay_us_func(DELAY_US_FUNC(delay_us_func))
+    lib.set_set_pin_func(set_pin_func)
+    lib.set_read_pin_func(read_pin_func)
+    lib.set_us_func(us_func)
+    lib.set_delay_us_func(delay_us_func)
 
     lib.read_temperature.restype = ctypes.c_float
     def read_temp():

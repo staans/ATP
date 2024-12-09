@@ -20,8 +20,6 @@ void DHT::begin(void) {
   _lastreadtime = 0;
 }
 
-#include <iostream>
-
 //boolean S == Scale.  True == Farenheit; False == Celcius
 float DHT::readTemperature(bool S) {
   float f;
@@ -102,9 +100,7 @@ boolean DHT::read(void) {
 
   // Check if sensor was read less than two seconds ago and return early
   // to use last reading.
-  std::cout << 1 << std::endl;
   currenttime = millis();
-  std::cout << 2 << std::endl;
   if (currenttime < _lastreadtime) {
     // ie there was a rollover
     _lastreadtime = 0;

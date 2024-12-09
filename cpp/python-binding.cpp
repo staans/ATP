@@ -15,7 +15,7 @@ extern "C" void set_read_pin_func(bool(*func)(int)) {
 }
 
 unsigned long(*us_func)(void) = nullptr;
-extern "C" void set_us_func(unsigned long(*func)(void)) {
+extern "C" void set_us_func(unsigned long(*func)()) {
     us_func = func;
 }
 
@@ -52,13 +52,17 @@ void interrupts() {}
 void noInterrupts() {}
 
 PinValue digitalRead(int pin) {
-    return HIGH;
+    return read_pin_func(pin) ? HIGH : LOW;
 }
 
 extern "C" float read_temperature() {
-    return DHT(8, DHT22).readTemperature();
+    auto dht = DHT(8, DHT22);
+    dht.begin();
+    return dht.readTemperature();
 }
 
 extern "C" float read_humidity() {
-    return DHT(8, DHT22).readHumidity();
+    auto dht = DHT(8, DHT22);
+    dht.begin();
+    return dht.readHumidity();
 }

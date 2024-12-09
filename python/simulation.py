@@ -2,6 +2,38 @@ from typehints import *
 
 # the only stateful code in this project B-)
 
+class Pin:
+    def __init__(self):
+        self.is_input = True
+        self.pull_up = False
+        self.out = None
+        self.is_being_pulled_down_due_to_external_forces_beyond_the_juristiction_of_the_pin : bool = False
+        self.is_being_pulled_high_due_to_external_forces_beyond_the_juristiction_of_the_pin : bool = False
+    
+    def read(self) -> bool:
+        if not self.is_input:
+            raise "reading an out pin"
+        if self.is_being_pulled_down_due_to_external_forces_beyond_the_juristiction_of_the_pin and self.is_being_pulled_high_due_to_external_forces_beyond_the_juristiction_of_the_pin:
+            raise "oopsie, kortsluiting"
+        if self.is_being_pulled_high_due_to_external_forces_beyond_the_juristiction_of_the_pin:
+            return True
+        if self.is_being_pulled_down_due_to_external_forces_beyond_the_juristiction_of_the_pin:
+            return False
+        if self.pull_up:
+            return True
+
+    def write(self, val : bool) -> None:
+        if self.is_input and val:
+            self.pull_up = True
+        if self.is_input and not val:
+            self.pull_up = False
+        if not self.is_input and val:
+            self.pull_up = False
+
+    def mode(self, mode : str):
+        pass
+
+
 class Simulation:
     def __init__(self):
         self.pins : list[bool] = [False] * 32
@@ -10,12 +42,14 @@ class Simulation:
         self.tsl2561 = TSL2561()
 
     def set_pin(self, pin_nr : int, value : False) -> None:
+        print(pin_nr, value)
         self.pins[pin_nr] = value
     
     def sleep(self, time : Microseconds) -> None:
+        print(time)
         self.time += time
 
-        self.dht22.get_output(self.time, tuple(self.pins))
+        self.pins[self.dht22.pin] = self.dht22.get_output(self.time, tuple(self.pins))
 
 
 class DHT22:
@@ -31,12 +65,12 @@ class DHT22:
     # should be called every time the simulation progresses in time
     # doesnt nececcarrilliyu work with pulses split between calls, eg, calling this function once != calling it twice with same pins and halved delta-time
     def get_output(self, delta_time : Microseconds, pins : tuple[bool]) -> bool:
-
         match self.state:
             # wait for a start pulse from mcu of at least 1ms
             case 'start-pulse':
                 if delta_time >= 1000 and not pins[self.pin]:
                     state = 'start-pause'
+                    print(self.state)
                 return True
 
             # wait 20-40us after start pulse
@@ -45,6 +79,7 @@ class DHT22:
                     self.send_progress = 0
                     self.signal = self.get_signal()
                     state = 'sending'
+                    print(self.state)
                 return True
 
             # send signals. currently has some thingies that could go wrong if the pulse length for 'start-pause' is too long, due to it consuming all of time
@@ -53,6 +88,7 @@ class DHT22:
                 signal = self.get_signal()
                 if self.send_progress >= len(signal):
                     self.state = 'start-pulse'
+                    print(self.state)
                     return pins[self.pin]
                 return self.signal[send_progress]
 
