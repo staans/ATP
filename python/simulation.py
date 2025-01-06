@@ -1,86 +1,136 @@
-from typehints import *
+from typehints import Microseconds
 
 # the only stateful code in this project B-)
 
+# class representing a pin. write, mode and read corrospond to digitalWrite, pinMode and digitalRead in arduino
+# must be connected to a wire before reading by doing Wire(pins) or wire.connect_to(pin)
 class Pin:
     def __init__(self):
-        self.is_input = True
-        self.pull_up = False
-        self.out = None
-        self.is_being_pulled_down_due_to_external_forces_beyond_the_juristiction_of_the_pin : bool = False
-        self.is_being_pulled_high_due_to_external_forces_beyond_the_juristiction_of_the_pin : bool = False
-    
-    def read(self) -> bool:
-        if not self.is_input:
-            raise "reading an out pin"
-        if self.is_being_pulled_down_due_to_external_forces_beyond_the_juristiction_of_the_pin and self.is_being_pulled_high_due_to_external_forces_beyond_the_juristiction_of_the_pin:
-            raise "oopsie, kortsluiting"
-        if self.is_being_pulled_high_due_to_external_forces_beyond_the_juristiction_of_the_pin:
-            return True
-        if self.is_being_pulled_down_due_to_external_forces_beyond_the_juristiction_of_the_pin:
-            return False
-        if self.pull_up:
-            return True
+        self.is_output = False
+        # is_high is also used when the pin is input to decide if the internal pull-up resistor is used (an actual arduino also uses the same value for both)
+        self.is_high = False
+        self.wire = None
 
-    def write(self, val : bool) -> None:
-        if self.is_input and val:
-            self.pull_up = True
-        if self.is_input and not val:
-            self.pull_up = False
-        if not self.is_input and val:
-            self.pull_up = False
+    def write(self, value : False) -> None:
+        self.is_high = value
 
+    # set mode of the pin. mode can be 'INPUT', 'INPUT_PULLUP' or 'OUTPUT'.
     def mode(self, mode : str):
-        pass
+        if mode == 'INPUT':
+            self.is_output = False
+            self.is_high = False # this line only correctly emulated arduino after v1.0.1 released in 2012. It seems to be fine with my code c++ code though
+        elif mode == 'INPUT_PULLUP':
+            self.is_output = False
+            self.is_high = True
+        elif mode == 'OUTPUT':
+            self.is_output = True
+        else:
+            raise Exception("Du bist ein stupide")
 
+    # reads and returns value of associated wire. raises if mode is output or if not connected to a wire or if floating or if short circuit
+    def read(self) -> bool:
+        if self.is_output:
+            raise Exception("urgh argh me no garg")
+
+        if not self.wire:
+            raise Exception("me when no wire")
+            
+        return self.wire.read()
+
+# class representing pins connected together. ground connection isn't modelled
+class Wire:
+    def __init__(self, pins : list[Pin]):
+        self.pins = pins
+        for pin in self.pins:
+            pin.wire = self
+    
+    # add another pin
+    def connect_to(self, pin : Pin):
+        self.pins.append(pin)
+        pin.wire = self
+
+    # returns true if high, false if low. raises exceptions if floating or short circuit
+    def read(self) -> bool:
+        # kinda badly written, but it doesn't really matter
+        out_values = [pin.is_high for pin in self.pins if pin.is_output]
+        
+        # if wire isn't activiely being set by output pins
+        if not out_values:
+            # return high if a pull up
+            if [pin.is_high for pin in self.pins if not pin.is_output]:
+                return True
+            # raise if otherwise (is floating)
+            raise Exception("uh oh, ik haat drijven")
+        
+        # return high if all output pins are high
+        if all(out_values):
+            return True
+        # return low if all output pins are low
+        if not any(out_values):
+            return False
+        
+        # if there are out_values but some are high and some are low, then there is a short circuit
+        # raise an error and a stink
+        raise Exception("me when ")
+    
 
 class Simulation:
     def __init__(self):
-        self.pins : list[bool] = [False] * 32
+        # arduino and simulation thingies
+        self.pins : list[Pin] = [Pin() for i in range(32)]
         self.time : Microseconds = 0
-        self.dht22 = DHT22(8)
+
+        self.dht22 = DHT22(Wire([self.pins[8]]))
         self.tsl2561 = TSL2561()
 
-    def set_pin(self, pin_nr : int, value : False) -> None:
-        print(pin_nr, value)
-        self.pins[pin_nr] = value
+    # somewhat (i assume HIGH=1/true, LOW=0/false, which i cant figure out whether or not this is guaranteed in the arduino documentation) equivalent to digitalWrite in arduino
+    def digital_write(self, pin_nr : int, value : bool) -> None:
+        self.pins[pin_nr].write(value)
     
-    def sleep(self, time : Microseconds) -> None:
-        print(time)
-        self.time += time
+    # equivalent-ish (mode is a string instead of an enum) to pinMode in arduino
+    def pin_mode(self, pin_nr : int, mode : str):
+        print(pin_nr, mode)
+        self.pins[pin_nr].mode(mode)
 
-        self.pins[self.dht22.pin] = self.dht22.get_output(self.time, tuple(self.pins))
+    # equivalent to pinRead in arduino
+    def digital_read(self, pin_nr : int) -> bool:
+        print(pin_nr, self.pins[pin_nr].read())
+        return self.pins[pin_nr].read()
+
+    def sleep(self, time : Microseconds) -> None:
+        self.dht22.update(time)
+        self.time += time
 
 
 class DHT22:
-    def __init__(self, pin : int):
-        self.pin : int = pin
-        self.state : str = 'stand-by'
+    def __init__(self, wire : Wire):
+        self.pin : Pin = Pin()
+        wire.connect_to(self.pin)
+        self.state : str = 'start-pulse'
         self.temp : Celcius = 21
         self.humidity : float = .9
         self.send_progress : Microseconds
         self.signal : tuple[bool]
 
-    # updates the state of the dht22 and returns what value it sets to pin (True = high, False = low. pin is open-collector thing and data wire is pulled-high)
+    # updates the state of the dht22
     # should be called every time the simulation progresses in time
-    # doesnt nececcarrilliyu work with pulses split between calls, eg, calling this function once != calling it twice with same pins and halved delta-time
-    def get_output(self, delta_time : Microseconds, pins : tuple[bool]) -> bool:
+    def update(self, delta_time : Microseconds):
+        print(self.state)
         match self.state:
             # wait for a start pulse from mcu of at least 1ms
             case 'start-pulse':
-                if delta_time >= 1000 and not pins[self.pin]:
-                    state = 'start-pause'
-                    print(self.state)
-                return True
+                if delta_time >= 1000 and self.pin.read() == False:
+                    self.state = 'start-pause'
+                return
 
             # wait 20-40us after start pulse
             case 'start-pause':
-                if delta_time >= 30 and pins[self.pin]:
+                if delta_time >= 30:
                     self.send_progress = 0
                     self.signal = self.get_signal()
-                    state = 'sending'
-                    print(self.state)
-                return True
+                    self.pin.mode('OUTPUT')
+                    self.state = 'sending'
+                return
 
             # send signals. currently has some thingies that could go wrong if the pulse length for 'start-pause' is too long, due to it consuming all of time
             case 'sending':
@@ -88,21 +138,21 @@ class DHT22:
                 signal = self.get_signal()
                 if self.send_progress >= len(signal):
                     self.state = 'start-pulse'
-                    print(self.state)
-                    return pins[self.pin]
-                return self.signal[send_progress]
+                    self.pin.mode('INPUT')
+                self.pin.write(self.signal[self.send_progress])
+                return
 
     # returns a tuple describing the sequencing of raising and lowering the data pin
     def get_signal(self) -> tuple[bool]:
-        signal : list[bool]
+        signal : list[bool] = []
 
         # response signal + pause
         signal += [False] * 80 + [True] * 80
 
         # convert units to bits
-        humid_int = int(humid.humid)
+        humid_int = int(self.humidity)
         humid_int_bin = bin(humid_int)[2:].ljust(8, '0')
-        humid_decimal = humid.humid % 1
+        humid_decimal = self.humidity % 1
         humid_decimal_bin = bin(int(humid_decimal*256))[2:].ljust(8, '0')
         humid_bin = humid_int_bin + humid_decimal_bin
 

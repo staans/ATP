@@ -1,34 +1,44 @@
 #include "python-binding.hpp"
 #include "DHT.h"
 
-#define ja true
-#define nee false
-
 void(*set_pin_func)(int, bool) = nullptr;
-extern "C" void set_set_pin_func(void(*func)(int, bool)) {
+extern "C" void provide_set_pin_func(void(*func)(int, bool)) {
     set_pin_func = func;
 }
 
 bool(*read_pin_func)(int) = nullptr;
-extern "C" void set_read_pin_func(bool(*func)(int)) {
+extern "C" void provide_read_pin_func(bool(*func)(int)) {
     read_pin_func = func;
 }
 
+void(*pin_mode_func)(int, char*) = nullptr;
+extern "C" void provide_pin_mode_func(void(*func)(int, char*)) {
+    pin_mode_func = func;
+}
+
 unsigned long(*us_func)(void) = nullptr;
-extern "C" void set_us_func(unsigned long(*func)()) {
+extern "C" void provide_us_func(unsigned long(*func)()) {
     us_func = func;
 }
 
 void(*delay_us_func)(unsigned long) = nullptr;
-extern "C" void set_delay_us_func(void(*func)(unsigned long)) {
+extern "C" void provide_delay_us_func(void(*func)(unsigned long)) {
     delay_us_func = func;
 }
 
-// makes pin high when setting mode to INPUT, since that should make connected wire floating (in some circumstances), and in my case my wires are pull-up
-// is kinda a botch, but
+
 void pinMode(int pin, PinMode mode) {
-    if (mode == INPUT)
-        digitalWrite(pin, HIGH);
+    switch (mode) {
+        case PinMode::INPUT:
+            pin_mode_func(pin, (char*)"INPUT\0");
+            return;
+        case PinMode::INPUT_PULLUP:
+            pin_mode_func(pin, (char*)"INPUT_PULLUP\0");
+            return;
+        case PinMode::OUTPUT:
+            pin_mode_func(pin, (char*)"OUTPUT\0");
+            return;
+    }
 }
 
 void digitalWrite(int pin, PinValue val) {
