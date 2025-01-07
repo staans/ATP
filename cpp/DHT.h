@@ -18,6 +18,9 @@ MIT license
 written by Adafruit Industries
 */
 
+// i forgot where i actually got this library from but it seems really outdated now that i take a closer look at it
+// nevertheless, it seems to be working somewhat
+
 // how many timing transitions we need to keep track of. 2 * number bits + extra
 #define MAXTIMINGS 85
 

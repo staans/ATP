@@ -50,14 +50,19 @@ class Wire:
         pin.wire = self
 
     # returns true if high, false if low. raises exceptions if floating or short circuit
-    def read(self) -> bool:
+    def read(self):
+        r = self.reada()
+        # print(self.pins[0].is_output, self.pins[0].is_high, self.pins[1].is_output, self.pins[1].is_high, r)
+        return r
+
+    def reada(self) -> bool:
         # kinda badly written, but it doesn't really matter
         out_values = [pin.is_high for pin in self.pins if pin.is_output]
         
         # if wire isn't activiely being set by output pins
         if not out_values:
-            # return high if a pull up
-            if [pin.is_high for pin in self.pins if not pin.is_output]:
+            # return high if any pins are pull up
+            if any(pin.is_high for pin in self.pins):
                 return True
             # raise if otherwise (is floating)
             raise Exception("uh oh, ik haat drijven")
@@ -80,7 +85,9 @@ class Simulation:
         self.pins : list[Pin] = [Pin() for i in range(32)]
         self.time : Microseconds = 0
 
-        self.dht22 = DHT22(Wire([self.pins[8]]))
+        pullup = Pin()
+        pullup.mode("INPUT_PULLUP")
+        self.dht22 = DHT22(Wire([self.pins[8], pullup]))
         self.tsl2561 = TSL2561()
 
     # somewhat (i assume HIGH=1/true, LOW=0/false, which i cant figure out whether or not this is guaranteed in the arduino documentation) equivalent to digitalWrite in arduino
@@ -89,58 +96,79 @@ class Simulation:
     
     # equivalent-ish (mode is a string instead of an enum) to pinMode in arduino
     def pin_mode(self, pin_nr : int, mode : str):
-        print(pin_nr, mode)
         self.pins[pin_nr].mode(mode)
 
     # equivalent to pinRead in arduino
     def digital_read(self, pin_nr : int) -> bool:
-        print(pin_nr, self.pins[pin_nr].read())
-        return self.pins[pin_nr].read()
+        r = self.pins[pin_nr].read()
+        return r
 
     def sleep(self, time : Microseconds) -> None:
-        self.dht22.update(time)
         self.time += time
+
+        self.dht22.update(time)
 
 
 class DHT22:
     def __init__(self, wire : Wire):
+        # connections
         self.pin : Pin = Pin()
         wire.connect_to(self.pin)
+
+        # state
+        self.pin.mode('INPUT_PULLUP')
         self.state : str = 'start-pulse'
-        self.temp : Celcius = 21
-        self.humidity : float = .9
-        self.send_progress : Microseconds
+        self.state_progress = 0
+
+        # signal creation
+        self.temp : Celcius = 2.05
+        self.humidity : float = 0.0
         self.signal : tuple[bool]
 
     # updates the state of the dht22
     # should be called every time the simulation progresses in time
     def update(self, delta_time : Microseconds):
-        print(self.state)
+        # could (maybe should) be rewritten to use a loop instead of recursion, but this works for now
         match self.state:
-            # wait for a start pulse from mcu of at least 1ms
+            # wait for a at least 1ms low as a start pulse
             case 'start-pulse':
-                if delta_time >= 1000 and self.pin.read() == False:
+                if self.pin.read() == False:
+                    self.state_progress += delta_time
+                else:
+                    self.state_progress = 0
+
+                if self.state_progress >= 1000:
+                    overflow = self.state_progress - 1000
+                    self.state_progress = 0
                     self.state = 'start-pause'
-                return
+                    self.update(overflow)
 
-            # wait 20-40us after start pulse
+            # wait for a 20-40us high after start pulse
             case 'start-pause':
-                if delta_time >= 30:
-                    self.send_progress = 0
-                    self.signal = self.get_signal()
-                    self.pin.mode('OUTPUT')
-                    self.state = 'sending'
-                return
+                if self.pin.read() == True:
+                    self.state_progress += delta_time
+                else:
+                    self.state_progress = 0
 
-            # send signals. currently has some thingies that could go wrong if the pulse length for 'start-pause' is too long, due to it consuming all of time
+                if self.state_progress >= 30:
+                    overflow = self.state_progress - 30
+                    self.pin.mode('OUTPUT')
+                    self.signal = self.get_signal()
+                    self.state_progress = 0
+                    self.state = 'sending'
+                    self.update(overflow)
+
             case 'sending':
-                self.send_progress += delta_time
-                signal = self.get_signal()
-                if self.send_progress >= len(signal):
-                    self.state = 'start-pulse'
+                self.state_progress += delta_time
+                
+                if self.state_progress < len(self.signal):
+                    self.pin.write(self.signal[self.state_progress])
+                else:
+                    overflow = self.state_progress - len(self.signal)
                     self.pin.mode('INPUT')
-                self.pin.write(self.signal[self.send_progress])
-                return
+                    self.state_progress = 0
+                    self.state = 'start-pulse'
+                    self.update(overflow)
 
     # returns a tuple describing the sequencing of raising and lowering the data pin
     def get_signal(self) -> tuple[bool]:
@@ -149,30 +177,42 @@ class DHT22:
         # response signal + pause
         signal += [False] * 80 + [True] * 80
 
-        # convert units to bits
-        humid_int = int(self.humidity)
-        humid_int_bin = bin(humid_int)[2:].ljust(8, '0')
-        humid_decimal = self.humidity % 1
-        humid_decimal_bin = bin(int(humid_decimal*256))[2:].ljust(8, '0')
-        humid_bin = humid_int_bin + humid_decimal_bin
+        temp_int = round(self.temp*10)
+        temp_int_bin = bin(temp_int).removeprefix('-').removeprefix('0b').rjust(16, '0')
+        temp_int_bin_signed = ('1' if self.temp < 0 else '0') + temp_int_bin[1:]
+        temp_bin = temp_int_bin_signed
 
-        temp_int = int(self.temp)
-        temp_int_bin = bin(temp_int)[2:].ljust(8, '0')
-        temp_decimal = self.temp % 1
-        temp_decimal_bin = bin(int(temp_decimal*256))[2:].ljust(8, '0')
-        temp_bin = temp_int_bin + temp_decimal_bin
+        check_bin = bin(int(temp_bin[:8], 2) + int(temp_bin[8:], 2)).removeprefix('0b')[-8:].rjust(8, '0')
+        # print(temp_int_bin, temp_decimal_bin, humid_int_bin, humid_decimal_bin, check_bin)
 
-        check_bin = bin(int(temp_int_bin, 2) + int(temp_decimal_bin, 2) + int(humid_int_bin, 2) + int(humid_decimal_bin, 2))[2:]
-        
-        bits = humid_int_bin + humid_decimal_bin + temp_int_bin + temp_decimal_bin + check_bin
+        # # bits = 8 bit RH int, 8 bit RH decimal, 16 bits signed temperature in deci-celius, 8 bit check-sum
+
+        bits = "0"*16 + temp_bin + check_bin
+
+        for i in range(5):
+            for j in range(8):
+                print(bits[i*8+j], end='')
+            print('', end=' ')
+
+        # while True:
+        #     print(bits)
+
+
+        print(len(bits))
+        print(bits)
 
         # bits to signals
         for bit in bits:
             signal.extend([False]*50)
-            signal.extend([True]*(70 if bit=='1' else 26))
+            if bit == '1':
+                signal.extend([True]*70)
+            elif bit == '0':
+                signal.extend([True]*26)
+        signal.extend([False]*50)
+        
+        print(len(signal))
 
         return tuple(signal)
-
 
 class TSL2561:
     pass

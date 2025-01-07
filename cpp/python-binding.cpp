@@ -66,13 +66,13 @@ PinValue digitalRead(int pin) {
 }
 
 extern "C" float read_temperature() {
-    auto dht = DHT(8, DHT22);
+    auto dht = DHT(8, DHT22, 60);
     dht.begin();
     return dht.readTemperature();
 }
 
 extern "C" float read_humidity() {
-    auto dht = DHT(8, DHT22);
+    auto dht = DHT(8, DHT22, 60); // why is the default amount of microseconds to differnciatate zeros and ones 6 us? very much seems like a typo but idk
     dht.begin();
     return dht.readHumidity();
 }

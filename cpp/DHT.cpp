@@ -90,7 +90,7 @@ float DHT::computeHeatIndex(float tempFahrenheit, float percentHumidity) {
           -0.00000199 * pow(tempFahrenheit, 2) * pow(percentHumidity, 2);
 }
 
-
+#include <iostream>
 boolean DHT::read(void) {
 
   uint8_t laststate = HIGH;
@@ -169,6 +169,7 @@ boolean DHT::read(void) {
   */
 
   // check we read 40 bits and that the checksum matches
+  std::cout << (int)j << '\t' << (int)(data[4] ) << ' ' << (int)data[0] << ' ' << (int)data[1]  << ' ' <<  (int)data[2]  << ' ' <<  (int)data[3] << std::endl;
   if ((j >= 40) && 
       (data[4] == ((data[0] + data[1] + data[2] + data[3]) & 0xFF)) ) {
     return true;
