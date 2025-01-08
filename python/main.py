@@ -5,8 +5,8 @@ from bindings import init
 
 def main():
     sim = Simulation()
-    temp_func = init(sim)
-    # print(temp_func())
+    temp_func, humid_func = init(sim)
+    print(temp_func(), humid_func())
     # regelsysteem()
 
 if __name__ == '__main__':

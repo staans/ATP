@@ -33,8 +33,6 @@ def init(sim : Simulation):
     lib.provide_delay_us_func(delay_us_func)
 
     lib.read_temperature.restype = ctypes.c_float
-    print(lib.read_temperature())
-    def read_temp():
-        return lib.read_temperature()
+    lib.read_humidity.restype = ctypes.c_float
 
-    return read_temp
+    return (lib.read_temperature, lib.read_humidity)

@@ -52,7 +52,6 @@ class Wire:
     # returns true if high, false if low. raises exceptions if floating or short circuit
     def read(self):
         r = self.reada()
-        # print(self.pins[0].is_output, self.pins[0].is_high, self.pins[1].is_output, self.pins[1].is_high, r)
         return r
 
     def reada(self) -> bool:
@@ -122,7 +121,7 @@ class DHT22:
 
         # signal creation
         self.temp : Celcius = 2.05
-        self.humidity : float = 0.0
+        self.humidity : float = 20.5
         self.signal : tuple[bool]
 
     # updates the state of the dht22
@@ -179,27 +178,16 @@ class DHT22:
 
         temp_int = round(self.temp*10)
         temp_int_bin = bin(temp_int).removeprefix('-').removeprefix('0b').rjust(16, '0')
-        temp_int_bin_signed = ('1' if self.temp < 0 else '0') + temp_int_bin[1:]
-        temp_bin = temp_int_bin_signed
+        temp_bin = ('1' if self.temp < 0 else '0') + temp_int_bin[1:]
 
-        check_bin = bin(int(temp_bin[:8], 2) + int(temp_bin[8:], 2)).removeprefix('0b')[-8:].rjust(8, '0')
-        # print(temp_int_bin, temp_decimal_bin, humid_int_bin, humid_decimal_bin, check_bin)
+        humid_int = round(self.humidity*10)
+        humid_bin = bin(humid_int).removeprefix('-').removeprefix('0b').rjust(16, '0')
 
-        # # bits = 8 bit RH int, 8 bit RH decimal, 16 bits signed temperature in deci-celius, 8 bit check-sum
+        check_bin = bin(int(humid_bin[:8], 2) + int(humid_bin[8:], 2) + int(temp_bin[:8], 2) + int(temp_bin[8:], 2)).removeprefix('0b')[-8:].rjust(8, '0')
 
-        bits = "0"*16 + temp_bin + check_bin
+        # # bits = 16 bits unsigned humidity in either percentage or just normal idk, 16 bits signed temperature in deci-celius, 8 bit check-sum
 
-        for i in range(5):
-            for j in range(8):
-                print(bits[i*8+j], end='')
-            print('', end=' ')
-
-        # while True:
-        #     print(bits)
-
-
-        print(len(bits))
-        print(bits)
+        bits = humid_bin + temp_bin + check_bin
 
         # bits to signals
         for bit in bits:
@@ -209,8 +197,6 @@ class DHT22:
             elif bit == '0':
                 signal.extend([True]*26)
         signal.extend([False]*50)
-        
-        print(len(signal))
 
         return tuple(signal)
 
